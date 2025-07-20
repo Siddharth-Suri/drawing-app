@@ -1,5 +1,5 @@
 import express from "express"
-import * as jwt from "jsonwebtoken"
+import jwt from "jsonwebtoken"
 import { middleware } from "./middleware.js"
 import { JWT_SECRET } from "@repo/backend-common/config"
 import {
@@ -7,56 +7,99 @@ import {
     CreateRoomSchema,
     SigninSchema,
 } from "@repo/common/types"
+import { prismaClient } from "@repo/db/client"
+import { createSlug } from "@repo/common/slug"
+
 const app = express()
-const port = 3000
+const port = 3001
 const users: any = []
 
 app.use(express.json())
 
-app.post("/signup", (req, res) => {
-    const data = CreateUserSchema.safeParse(req.body)
+app.post("/signup", async (req, res) => {
+    const parsedData = CreateUserSchema.safeParse(req.body)
 
-    if (!data.success) {
+    if (!parsedData.success) {
         return res
             .status(404)
             .json({ message: "Username or Password are missing" })
     }
 
-    // db call here
-
-    res.status(200).json({
-        userid: 123,
-    })
+    try {
+        const user = await prismaClient.user.create({
+            data: {
+                email: parsedData.data.username,
+                //todo : hash the password
+                password: parsedData.data.password,
+                name: parsedData.data.name,
+            },
+        })
+        res.status(200).json({
+            userid: user.id,
+        })
+    } catch (e) {
+        res.status(411).json({
+            msg: "Email already exists",
+        })
+    }
 })
 
-app.post("/signin", (req, res) => {
-    const userId = 1
+app.post("/signin", async (req, res) => {
     const data = SigninSchema.safeParse(req.body)
 
     if (!data.success) {
         return res
-            .status(404)
+            .status(400)
             .json({ message: "Username or Password are missing" })
     }
 
-    const token = jwt.sign({ userId }, JWT_SECRET)
-    res.json({
-        token,
-    })
+    //unhash the password here
+    try {
+        const user = await prismaClient.user.findFirst({
+            where: {
+                email: data.data.username,
+                password: data.data.password,
+            },
+        })
+        if (!user) {
+            res.status(401).json({
+                msg: "User doesn't exist",
+            })
+        } else {
+            const token = jwt.sign({ userId: user.id }, JWT_SECRET)
+            res.status(200).json({
+                token,
+            })
+        }
+    } catch (e) {
+        res.status(500).json({
+            msg: `Server error `,
+        })
+    }
 })
 
-app.post("/room", middleware, (req, res) => {
+app.post("/room", middleware, async (req, res) => {
     const data = CreateRoomSchema.safeParse(req.body)
-
     if (!data.success) {
-        return res
-            .status(404)
-            .json({ message: "Username or Password are missing" })
+        return res.status(404).json({ message: "Name is missing" })
     }
-
-    res.json({
-        roomId: 123,
-    })
+    const sluggedName = createSlug(data.data.name)
+    try {
+        const room = await prismaClient.room.create({
+            data: {
+                slug: sluggedName,
+                //@ts-ignore
+                adminId: req.userId,
+            },
+        })
+        res.json({
+            roomId: room.id,
+        })
+    } catch (e) {
+        res.json({
+            msg: "Server Error while creating room" + e,
+        })
+    }
 })
 
 app.listen(port, () => {
