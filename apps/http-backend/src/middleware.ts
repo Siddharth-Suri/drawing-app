@@ -7,7 +7,7 @@ export function middleware(req: Request, res: Response, next: NextFunction) {
     const decoded = jwt.verify(token, JWT_SECRET)
 
     if (decoded) {
-        //how do you update the structure of the epress req object
+        //how do you update the structure of the express req object
         //@ts-ignore
         req.userId = decoded.userId
         next()
