@@ -16,6 +16,8 @@ const users: any = []
 
 app.use(express.json())
 
+// use hashing bycrypt for passwords
+
 app.post("/signup", async (req, res) => {
     const parsedData = CreateUserSchema.safeParse(req.body)
 
@@ -34,6 +36,7 @@ app.post("/signup", async (req, res) => {
                 name: parsedData.data.name,
             },
         })
+
         res.status(200).json({
             userid: user.id,
         })
@@ -80,10 +83,13 @@ app.post("/signin", async (req, res) => {
 
 app.post("/room", middleware, async (req, res) => {
     const data = CreateRoomSchema.safeParse(req.body)
+
     if (!data.success) {
         return res.status(404).json({ message: "Name is missing" })
     }
+
     const sluggedName = createSlug(data.data.name)
+
     try {
         const room = await prismaClient.room.create({
             data: {
