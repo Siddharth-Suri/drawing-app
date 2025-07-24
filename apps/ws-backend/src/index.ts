@@ -1,6 +1,8 @@
 import { WebSocketServer, WebSocket } from "ws"
 import jwt, { JwtPayload } from "jsonwebtoken"
 import { JWT_SECRET } from "@repo/backend-common/config"
+import { prismaClient } from "@repo/db/client"
+
 const wss = new WebSocketServer({ port: 8080 })
 
 console.log(`Created a port for ws: 8080`)
@@ -20,7 +22,8 @@ type User = {
 
 // 1. persist things to thee database
 // 2. add auth , if you subscribe to room1 you shouldnt be able to send to room2
-// 3. you can add queues for async addition of messages to the database , there are a lot of architectures
+// 3. you can add queues for async addition of messages to the database
+//    there are a lot of architectures you can refer chess video of harkirat
 
 const usersArray: User[] = []
 
@@ -63,39 +66,57 @@ wss.on("connection", function connection(ws, request) {
         rooms: [],
     })
 
-    ws.on("message", function message(data) {
+    ws.on("message", async function message(data) {
         const parsedData = JSON.parse(data as unknown as string)
-
-        if (parsedData.type == "join_room") {
-            const user = usersArray.find((x) => x.ws == ws)
-            user?.rooms.push(parsedData.roomId)
+        try {
+            if (parsedData.type == "join_room") {
+                const user = usersArray.find((x) => x.ws == ws)
+                user?.rooms.push(parsedData.roomId)
+            }
+        } catch {
+            return "Something went wrong while joining room "
         }
 
         if (parsedData.type == "leave_room") {
             try {
                 const user = usersArray.find((x) => x.ws == ws)
                 if (!user) return
-                user.rooms = user?.rooms.filter((x) => x == parsedData.roomId)
+                user.rooms = user?.rooms.filter((x) => x !== parsedData.roomId)
             } catch (e) {
                 return
             }
         }
 
         if (parsedData.type == "chat") {
-            const roomId = parsedData.roomId
-            const message = parsedData.message
+            try {
+                const roomId = parsedData.roomId
+                const message = parsedData.message
 
-            usersArray.forEach((user) => {
-                if (user.rooms.includes(roomId)) {
-                    user.ws.send(
-                        JSON.stringify({
-                            type: "chat",
-                            message,
-                            roomId,
-                        })
-                    )
-                }
-            })
+                // need to make sure both creation of messages and send it dependent
+                // and one doesn't happen if other fails
+
+                await prismaClient.chat.create({
+                    data: {
+                        message,
+                        userId,
+                        roomId,
+                    },
+                })
+
+                usersArray.forEach((user) => {
+                    if (user.rooms.includes(roomId)) {
+                        user.ws.send(
+                            JSON.stringify({
+                                type: "chat",
+                                message,
+                                roomId,
+                            })
+                        )
+                    }
+                })
+            } catch (e) {
+                ws.send("Something went wrong while sending message" + e)
+            }
         }
     })
 })

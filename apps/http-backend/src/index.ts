@@ -108,6 +108,33 @@ app.post("/room", middleware, async (req, res) => {
     }
 })
 
+//now to get past messages of the chat room
+
+app.get("/chats/:roomId", async (req, res) => {
+    console.log("connected")
+    const roomId = Number(req.params.roomId)
+    const exists = await prismaClient.room.findFirst({
+        where: {
+            id: roomId,
+        },
+    })
+    if (!exists) {
+        return res.status(404).json({
+            msg: "Room was not found",
+        })
+    }
+    const messages = await prismaClient.chat.findMany({
+        where: {
+            roomId: roomId,
+        },
+        orderBy: {
+            id: "desc",
+        },
+        take: 50,
+    })
+    return res.status(200).json(messages)
+})
+
 app.listen(port, () => {
     console.log("Started http server: " + port)
 })
