@@ -132,7 +132,30 @@ app.get("/chats/:roomId", async (req, res) => {
         },
         take: 50,
     })
-    return res.status(200).json(messages)
+    return res.status(200).json({ messages })
+})
+
+app.get("/room/:slug", async (req, res) => {
+    const slug = createSlug(req.params.slug)
+    try {
+        const room = await prismaClient.room.findFirst({
+            where: {
+                slug: slug,
+            },
+        })
+        if (!room || room == null) {
+            return res.status(404).json({
+                msg: "Room was not found",
+            })
+        }
+        return res.status(200).json({
+            roomId: room.id,
+        })
+    } catch (e) {
+        res.status(500).json({
+            msg: "Server error while getting roomId",
+        })
+    }
 })
 
 app.listen(port, () => {
