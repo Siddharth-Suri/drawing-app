@@ -11,4 +11,6 @@ export function useSocket() {
             setSocket(ws)
         }
     }, [socket, loading])
+
+    return { socket, loading }
 }
